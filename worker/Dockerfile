@@ -1,11 +1,22 @@
-FROM microsoft/dotnet:1.0.0-preview1
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
 WORKDIR /app
 
-ADD src/ /app/src/
+# Copy only the necessary files first to leverage Docker caching
+COPY src/Worker/*.csproj src/Worker/
+WORKDIR /app/src/Worker
+RUN dotnet restore
 
-RUN dotnet restore -v minimal src/ \
-    && dotnet publish -c Release -o ./ src/Worker/ \
-    && rm -rf src/ $HOME/.nuget/
+# Copy the rest of the source code
+COPY src/ /app/src/
 
-CMD dotnet Worker.dll
+# Build and publish the application
+RUN dotnet publish -c Release -o /app/out
+
+# Use a smaller runtime image for final execution
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/out .
+
+CMD ["dotnet", "Worker.dll"]
+
